@@ -1,0 +1,18 @@
+{
+  "network": "testnet",
+  "contract": "ptix74d83134.testnet",
+  "contractExplorer": "https://testnet.nearblocks.io/address/ptix74d83134.testnet",
+  "token": "ticket-1",
+  "eventId": "e2e-1794446606921",
+  "eventName": "NEAR E2E Night",
+  "host": "ptix74d83134.testnet",
+  "guest": "ptixg74d83134.testnet",
+  "buyer": "ptixb74d83134.testnet",
+  "mintTx": "ivUPSPHUF1c6BNy7phNFo119kY3S8y4vwk6ybYBwgEH",
+  "mintExplorer": "https://testnet.nearblocks.io/txns/ivUPSPHUF1c6BNy7phNFo119kY3S8y4vwk6ybYBwgEH",
+  "transferTx": "3pP11torkT9zoBFzg7xxXGehL3MCbBn1vbvpF9Rcc1HP",
+  "transferExplorer": "https://testnet.nearblocks.io/txns/3pP11torkT9zoBFzg7xxXGehL3MCbBn1vbvpF9Rcc1HP",
+  "finalOwner": "ptixb74d83134.testnet",
+  "provenanceSteps": 2,
+  "ok": true
+}

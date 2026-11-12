@@ -1,0 +1,14 @@
+keys/*
+!keys/README.md
+credentials/
+.near-credentials/
+*.pem
+.env
+.env.*
+.env.path
+target/
+node_modules/
+app/dist/
+app/.vite/
+.DS_Store
+near-cli-rs-*.tar.gz
