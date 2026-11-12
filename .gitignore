@@ -20,3 +20,7 @@ demo/tts/*.mp3
 demo/tts/*.json
 demo/package-lock.json
 app/dist/
+
+app/.netlify/
+demo/__pycache__/
+demo/fonts/

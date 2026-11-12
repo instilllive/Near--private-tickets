@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   CONTRACT_ID,
-  connectAccount,
   explorerAccount,
   explorerTx,
   isOwner,
@@ -10,10 +9,11 @@ import {
   tokensForOwner,
   transferTicket,
 } from "./near.js";
+import { initSelector, onAccountsChanged, openWalletModal, signedAccountId, walletSignOut } from "./wallet.js";
 
 const EVENTS_KEY = "ptix-near:events:v1";
-const SESSION_KEY = "ptix-near:session:v1";
-const DEMO_KEY = "ptix-near:demo-accounts:v1";
+const LEGACY_SESSION = "ptix-near:session:v1";
+const LEGACY_DEMO = "ptix-near:demo-accounts:v1";
 
 function loadEvents() {
   try {
@@ -23,68 +23,61 @@ function loadEvents() {
   }
 }
 
+function clearLegacyKeys() {
+  try {
+    sessionStorage.removeItem(LEGACY_SESSION);
+    sessionStorage.removeItem(LEGACY_DEMO);
+  } catch {
+    /* ignore */
+  }
+}
+
 export default function App() {
   const [tab, setTab] = useState("event");
   const [accountId, setAccountId] = useState("");
-  const [privateKey, setPrivateKey] = useState("");
-  const [session, setSession] = useState(null);
-  const [roles, setRoles] = useState(null);
-  const [activeRole, setActiveRole] = useState("");
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [tokenId, setTokenId] = useState("");
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const demo = JSON.parse(sessionStorage.getItem(DEMO_KEY) || "null");
-      if (demo && demo.host) {
-        const clean = {};
-        for (const [role, val] of Object.entries(demo)) {
-          clean[role] = { accountId: val.accountId, privateKey: val.privateKey };
-        }
-        setRoles(clean);
-        useRole("host", clean);
-        return;
-      }
-      const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
-      if (saved?.accountId) {
-        setAccountId(saved.accountId);
-        setPrivateKey(saved.privateKey || "");
-        setSession({ accountId: saved.accountId });
-      }
-    } catch {
-      /* ignore */
-    }
+    clearLegacyKeys();
+    initSelector().finally(() => setReady(true));
+    const off = onAccountsChanged((accounts) => {
+      setAccountId(signedAccountId(accounts));
+    });
+    return off;
   }, []);
 
-  function remember(id, key) {
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify({ accountId: id, privateKey: key }));
-    setAccountId(id);
-    setPrivateKey(key);
-    setSession({ accountId: id });
-  }
-
-  function useRole(role, map = roles) {
-    const entry = map?.[role];
-    if (!entry) return;
-    setActiveRole(role);
-    remember(entry.accountId, entry.privateKey);
-  }
-
-  function signOut() {
-    sessionStorage.removeItem(SESSION_KEY);
-    setSession(null);
-    setPrivateKey("");
-    setActiveRole("");
-  }
-
-  async function withAccount(fn) {
+  async function connect() {
     setError("");
-    setStatus("Signing on testnet…");
     try {
-      const account = await connectAccount(accountId.trim(), privateKey.trim());
-      remember(accountId.trim(), privateKey.trim());
-      const result = await fn(account);
+      await openWalletModal();
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }
+
+  async function disconnect() {
+    setError("");
+    try {
+      await walletSignOut();
+      setAccountId("");
+    } catch (e) {
+      setError(e.message || String(e));
+    }
+  }
+
+  async function withWallet(fn) {
+    if (!accountId) {
+      const msg = "Connect a NEAR testnet wallet to mint or transfer.";
+      setError(msg);
+      throw new Error(msg);
+    }
+    setError("");
+    setStatus("Approve the transaction in your wallet…");
+    try {
+      const result = await fn();
       setStatus("");
       return result;
     } catch (e) {
@@ -97,7 +90,8 @@ export default function App() {
   return (
     <div className="wrap">
       <header>
-        <h1>Private Tickets on NEAR testnet</h1>
+        <p className="eyebrow">Independent hackathon entry · testnet only</p>
+        <h1>Private Tickets</h1>
         <p>
           NFT tickets are for ownership, trading and provenance. Events and the
           door log stay in this app. Contract:{" "}
@@ -105,55 +99,28 @@ export default function App() {
         </p>
       </header>
 
-      {session ? (
-        <div className="card" data-testid="session-bar">
+      <div className="card" data-testid="session-bar">
+        {accountId ? (
           <div className="connected">
             <p className="ok">
-              Using {activeRole ? `${activeRole}: ` : ""}
-              <span className="mono" data-testid="session-account">{session.accountId}</span>
+              Connected: <span className="mono" data-testid="session-account">{accountId}</span>
             </p>
-            <button className="ghost" onClick={signOut}>Switch account</button>
+            <button className="ghost" onClick={disconnect}>Sign out</button>
           </div>
-          {roles && (
-            <div className="roles" data-testid="role-switcher">
-              {["host", "guest", "buyer"].filter((r) => roles[r]).map((r) => (
-                <button
-                  key={r}
-                  className={activeRole === r ? "active" : ""}
-                  data-testid={`role-${r}`}
-                  onClick={() => useRole(r)}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="card">
-          <h2>Testnet account</h2>
-          <p className="muted">
-            Paste a testnet account and its private key. It stays in this browser
-            tab only, is never sent to our servers, and is used only to sign
-            testnet transactions. Do not use a mainnet key.
-          </p>
-          <label>Account ID</label>
-          <input value={accountId} onChange={(e) => setAccountId(e.target.value)} placeholder="you.testnet" />
-          <label>Private key (testnet only)</label>
-          <input
-            type="password"
-            value={privateKey}
-            onChange={(e) => setPrivateKey(e.target.value)}
-            placeholder="ed25519:…"
-          />
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="primary" onClick={() => remember(accountId.trim(), privateKey.trim())}>
-              Use this account
+        ) : (
+          <>
+            <h2>NEAR testnet wallet</h2>
+            <p className="muted">
+              You can look up a ticket, see its owner and provenance, and run a
+              door check without a wallet. Connect a testnet wallet (MyNearWallet
+              or Meteor) only when you want to mint or transfer.
+            </p>
+            <button className="primary" onClick={connect} disabled={!ready} data-testid="connect-wallet">
+              Connect testnet wallet
             </button>
-            <button className="ghost" onClick={signOut}>Clear</button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       <div className="tabs">
         {[["event", "Event"], ["ticket", "Ticket"], ["door", "Door"]].map(([id, label]) => (
@@ -169,11 +136,11 @@ export default function App() {
       </div>
 
       {tab === "event" && (
-        <EventPanel withAccount={withAccount} onMinted={(id) => setTokenId(id)} />
+        <EventPanel withWallet={withWallet} connected={!!accountId} onMinted={(id) => setTokenId(id)} />
       )}
       {tab === "ticket" && (
         <TicketPanel
-          withAccount={withAccount}
+          withWallet={withWallet}
           accountId={accountId}
           tokenId={tokenId}
           setTokenId={setTokenId}
@@ -185,11 +152,19 @@ export default function App() {
 
       {status && <p className="muted" data-testid="status">{status}</p>}
       {error && <p className="err" data-testid="error">{error}</p>}
+
+      <footer className="site-footer">
+        <p className="built">Built on NEAR</p>
+        <p className="muted">
+          An independent entry, not an official NEAR Protocol site. Tickets live
+          on NEAR testnet only — no mainnet funds.
+        </p>
+      </footer>
     </div>
   );
 }
 
-function EventPanel({ withAccount, onMinted }) {
+function EventPanel({ withWallet, connected, onMinted }) {
   const [events, setEvents] = useState(loadEvents);
   const [name, setName] = useState("NEAR Demo Night");
   const [date, setDate] = useState("2026-11-14");
@@ -209,8 +184,8 @@ function EventPanel({ withAccount, onMinted }) {
   async function mint(e) {
     e.preventDefault();
     const ev = events.find((x) => x.id === eventId) || { id: eventId, name };
-    const out = await withAccount((account) =>
-      mintTicket(account, {
+    const out = await withWallet(() =>
+      mintTicket({
         receiverId: guest.trim(),
         eventId: ev.id,
         eventName: ev.name,
@@ -251,6 +226,7 @@ function EventPanel({ withAccount, onMinted }) {
       </div>
       <div className="card">
         <h2>2. Mint a ticket (on-chain NEP-171)</h2>
+        {!connected && <p className="muted">Connect a testnet wallet to mint.</p>}
         <form onSubmit={mint}>
           <label>Event</label>
           <input data-testid="event-id" value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="evt-…" required />
@@ -262,7 +238,7 @@ function EventPanel({ withAccount, onMinted }) {
             placeholder="guest.testnet"
             required
           />
-          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="mint-btn">
+          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="mint-btn" disabled={!connected}>
             Mint to guest
           </button>
         </form>
@@ -277,7 +253,7 @@ function EventPanel({ withAccount, onMinted }) {
   );
 }
 
-function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
+function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
   const [record, setRecord] = useState(null);
   const [owned, setOwned] = useState([]);
   const [receiver, setReceiver] = useState("");
@@ -296,6 +272,10 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
 
   async function loadOwned() {
     setErr("");
+    if (!accountId) {
+      setErr("Connect a wallet to list tickets you own, or look up a token id below.");
+      return;
+    }
     try {
       setOwned(await tokensForOwner(accountId.trim()));
     } catch (e2) {
@@ -305,8 +285,8 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
 
   async function send(e) {
     e.preventDefault();
-    const out = await withAccount((account) =>
-      transferTicket(account, { receiverId: receiver.trim(), tokenId: tokenId.trim() })
+    const out = await withWallet(() =>
+      transferTicket({ receiverId: receiver.trim(), tokenId: tokenId.trim() })
     );
     setTx(out);
     setRecord(await ticketRecord(tokenId.trim()));
@@ -316,6 +296,7 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
     <>
       <div className="card">
         <h2>Look up a ticket</h2>
+        <p className="muted">No wallet needed. This reads the contract on testnet.</p>
         <form onSubmit={lookup}>
           <label>Token ID</label>
           <input
@@ -326,7 +307,7 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
           />
           <div className="row" style={{ marginTop: 12 }}>
             <button className="primary" type="submit" data-testid="show-owner">Show ownership</button>
-            <button type="button" onClick={loadOwned}>Tickets I own</button>
+            <button type="button" onClick={loadOwned} disabled={!accountId}>Tickets I own</button>
           </div>
         </form>
         {owned.length > 0 && (
@@ -361,7 +342,11 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
       </div>
       <div className="card">
         <h2>Transfer</h2>
-        <p className="muted">Sign with the current owner’s testnet key.</p>
+        <p className="muted">
+          {accountId
+            ? "Sign with the current owner’s testnet wallet."
+            : "Connect the current owner’s testnet wallet to transfer."}
+        </p>
         <form onSubmit={send}>
           <label>Receiver</label>
           <input
@@ -371,7 +356,7 @@ function TicketPanel({ withAccount, accountId, tokenId, setTokenId }) {
             placeholder="buyer.testnet"
             required
           />
-          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="transfer-btn">
+          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="transfer-btn" disabled={!accountId}>
             Transfer ticket
           </button>
         </form>
@@ -434,9 +419,9 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
     <div className="card">
       <h2>Door check-in</h2>
       <p className="muted">
-        The door asks the contract who owns the ticket. Admission is granted only
-        when the presented account is the current on-chain owner. The check-in
-        log stays in this app, not on chain.
+        No wallet needed. The door asks the contract who owns the ticket.
+        Admission is granted only when the presented account is the current
+        on-chain owner. The check-in log stays in this app, not on chain.
       </p>
       <form onSubmit={check}>
         <label>Token ID</label>

@@ -1,5 +1,6 @@
-import { connect, keyStores, KeyPair, utils, providers } from "near-api-js";
+import { utils, providers } from "near-api-js";
 import { CONTRACT_ID, NETWORK, NODE_URL } from "./config.js";
+import { getWallet } from "./wallet.js";
 
 function bytesToString(bytes) {
   if (typeof Buffer !== "undefined") return Buffer.from(bytes).toString();
@@ -53,61 +54,70 @@ export async function tokensForOwner(accountId) {
   });
 }
 
-export async function connectAccount(accountId, privateKey) {
-  const keyStore = new keyStores.InMemoryKeyStore();
-  await keyStore.setKey(NETWORK, accountId, KeyPair.fromString(privateKey));
-  const near = await connect({
-    networkId: NETWORK,
-    keyStore,
-    nodeUrl: NODE_URL,
-  });
-  return near.account(accountId);
-}
-
-export async function mintTicket(account, { receiverId, eventId, eventName }) {
-  const result = await account.functionCall({
-    contractId: CONTRACT_ID,
-    methodName: "nft_mint",
-    args: {
-      receiver_id: receiverId,
-      event_id: eventId,
-      event_name: eventName,
-    },
-    gas: 30_000_000_000_000n,
-    attachedDeposit: utils.format.parseNearAmount("0.05"),
+export async function mintTicket({ receiverId, eventId, eventName }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "nft_mint",
+          args: {
+            receiver_id: receiverId,
+            event_id: eventId,
+            event_name: eventName,
+          },
+          gas: "30000000000000",
+          deposit: utils.format.parseNearAmount("0.05"),
+        },
+      },
+    ],
   });
   return extract(result);
 }
 
-export async function transferTicket(account, { receiverId, tokenId }) {
-  const result = await account.functionCall({
-    contractId: CONTRACT_ID,
-    methodName: "nft_transfer",
-    args: {
-      receiver_id: receiverId,
-      token_id: tokenId,
-      approval_id: null,
-      memo: "private-tickets-transfer",
-    },
-    gas: 30_000_000_000_000n,
-    attachedDeposit: 1n,
+export async function transferTicket({ receiverId, tokenId }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "nft_transfer",
+          args: {
+            receiver_id: receiverId,
+            token_id: tokenId,
+            approval_id: null,
+            memo: "private-tickets-transfer",
+          },
+          gas: "30000000000000",
+          deposit: "1",
+        },
+      },
+    ],
   });
   return extract(result);
 }
 
 function extract(result) {
-  const hash = result.transaction?.hash || result.transaction_outcome?.id;
+  const hash =
+    result?.transaction?.hash ||
+    result?.transaction_outcome?.id ||
+    result?.transactionHash ||
+    null;
   let token = null;
-  for (const outcome of result.receipts_outcome || []) {
-    const logs = outcome.outcome?.logs || [];
-    for (const log of logs) {
+  const outcomes = result?.receipts_outcome || [];
+  for (const outcome of outcomes) {
+    for (const log of outcome.outcome?.logs || []) {
+      const body = String(log).startsWith("EVENT_JSON:") ? String(log).slice(11) : log;
       try {
-        const parsed = JSON.parse(log.replace(/^EVENT_JSON:/, ""));
-        if (parsed.event === "nft_mint" && parsed.data?.[0]?.token_ids?.[0]) {
-          token = parsed.data[0].token_ids[0];
-        }
+        const parsed = JSON.parse(body);
+        const id = parsed.data?.[0]?.token_ids?.[0];
+        if (id) token = id;
       } catch {
-        /* ignore non-JSON logs */
+        /* ignore */
       }
     }
     const status = outcome.outcome?.status?.SuccessValue;
