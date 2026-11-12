@@ -120,6 +120,10 @@ Open the printed local URL.
 - `docs/` — recorded testnet results and submission drafts
 - `keys/` — local testnet keys, not in git
 
+## Demo video
+
+A 16:9 three-device demo (iPhone, iPad, and desktop, recorded from the real local app against NEAR testnet) is at `demo/private-tickets-near.mp4`. It shows a host minting a NEP-171 ticket to a guest, the owner on-chain, a transfer to a buyer, and the door admitting the new owner and denying the previous owner. Testnet transactions from that recording are listed in `demo/TESTNET-TXS.md`.
+
 ## License
 
 MIT. See `LICENSE`.

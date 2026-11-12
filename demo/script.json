@@ -1,0 +1,9 @@
+[
+  ["hook", "People screenshot tickets. Hosts can't tell who actually holds the pass.", "People screenshot tickets. Hosts can't tell who actually holds the pass."],
+  ["mint", "So on NEAR testnet, the host mints an NEP-171 ticket straight to the guest's account.", "The host mints an NEP-171 ticket to the guest's account."],
+  ["owner", "The contract is the source of truth. Right now, the guest owns this ticket.", "The contract is the source of truth. The guest owns this ticket."],
+  ["transfer", "The guest transfers it to a buyer. Provenance stays on chain.", "The guest transfers it to a buyer. Provenance stays on chain."],
+  ["admit", "At the door, we ask the contract who owns it. The buyer is admitted.", "At the door, the buyer is admitted."],
+  ["deny", "The previous owner is denied.", "The previous owner is denied."],
+  ["close", "Ownership, trading, and provenance on NEAR. Events stay in the app. Built at NEAR HACKATHON.", "Ownership, trading, and provenance on NEAR. Built at NEAR HACKATHON."]
+]

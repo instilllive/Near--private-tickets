@@ -1,0 +1,28 @@
+1
+00:00:00,000 --> 00:00:04,254
+People screenshot tickets. Hosts can't tell who actually holds the pass.
+
+2
+00:00:04,454 --> 00:00:18,106
+The host mints an NEP-171 ticket to the guest's account.
+
+3
+00:00:18,356 --> 00:00:23,941
+The contract is the source of truth. The guest owns this ticket.
+
+4
+00:00:24,191 --> 00:00:40,872
+The guest transfers it to a buyer. Provenance stays on chain.
+
+5
+00:00:41,122 --> 00:00:49,733
+At the door, the buyer is admitted.
+
+6
+00:00:49,983 --> 00:00:58,383
+The previous owner is denied.
+
+7
+00:00:58,633 --> 00:01:04,687
+Ownership, trading, and provenance on NEAR. Built at NEAR HACKATHON.
+
