@@ -99,7 +99,7 @@ export default function App() {
         </p>
       </header>
 
-      <div className="card" data-testid="session-bar">
+      <div className="card session-card" data-testid="session-bar">
         {accountId ? (
           <div className="connected">
             <p className="ok">
@@ -108,17 +108,19 @@ export default function App() {
             <button className="ghost" onClick={disconnect}>Sign out</button>
           </div>
         ) : (
-          <>
-            <h2>NEAR testnet wallet</h2>
-            <p className="muted">
-              You can look up a ticket, see its owner and provenance, and run a
-              door check without a wallet. Connect a testnet wallet (MyNearWallet
-              or Meteor) only when you want to mint or transfer.
-            </p>
+          <div className="session-body">
+            <div className="session-copy">
+              <h2>NEAR testnet wallet</h2>
+              <p className="muted">
+                Look up a ticket, its owner and provenance, or run a door check
+                without a wallet. Connect a testnet wallet (MyNearWallet or Meteor)
+                only to mint or transfer.
+              </p>
+            </div>
             <button className="primary" onClick={connect} disabled={!ready} data-testid="connect-wallet">
               Connect testnet wallet
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -196,9 +198,10 @@ function EventPanel({ withWallet, connected, onMinted }) {
   }
 
   return (
-    <>
+    <div className="panel-grid">
       <div className="card">
-        <h2>1. Create an event (stored in this browser)</h2>
+        <h2>1. Create an event</h2>
+        <p className="muted">Stored in this browser, not on chain.</p>
         <form onSubmit={addEvent}>
           <div className="row">
             <div>
@@ -225,8 +228,12 @@ function EventPanel({ withWallet, connected, onMinted }) {
         )}
       </div>
       <div className="card">
-        <h2>2. Mint a ticket (on-chain NEP-171)</h2>
-        {!connected && <p className="muted">Connect a testnet wallet to mint.</p>}
+        <h2>2. Mint a ticket</h2>
+        <p className="muted">
+          {connected
+            ? "Mints an on-chain NEP-171 ticket on NEAR testnet."
+            : "Connect a testnet wallet to mint an on-chain NEP-171 ticket."}
+        </p>
         <form onSubmit={mint}>
           <label>Event</label>
           <input data-testid="event-id" value={eventId} onChange={(e) => setEventId(e.target.value)} placeholder="evt-…" required />
@@ -249,7 +256,7 @@ function EventPanel({ withWallet, connected, onMinted }) {
           </p>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -293,7 +300,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
   }
 
   return (
-    <>
+    <div className="panel-grid">
       <div className="card">
         <h2>Look up a ticket</h2>
         <p className="muted">No wallet needed. This reads the contract on testnet.</p>
@@ -305,7 +312,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
             onChange={(e) => setTokenId(e.target.value)}
             placeholder="ticket-1"
           />
-          <div className="row" style={{ marginTop: 12 }}>
+          <div className="row actions" style={{ marginTop: 12 }}>
             <button className="primary" type="submit" data-testid="show-owner">Show ownership</button>
             <button type="button" onClick={loadOwned} disabled={!accountId}>Tickets I own</button>
           </div>
@@ -323,9 +330,10 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
           </ul>
         )}
         {record ? (
-          <div data-testid="ticket-record">
+          <div className="record-block" data-testid="ticket-record">
             <p>
-              <b>{record.event_name}</b> ({record.event_id})<br />
+              <b>{record.event_name}</b>
+              <span className="record-meta mono">{record.event_id}</span>
               Owner: <span className="mono" data-testid="current-owner">{record.token.owner_id}</span>
             </p>
             <h3>Provenance</h3>
@@ -366,7 +374,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
           </p>
         )}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -424,22 +432,28 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
         on-chain owner. The check-in log stays in this app, not on chain.
       </p>
       <form onSubmit={check}>
-        <label>Token ID</label>
-        <input
-          data-testid="door-token"
-          value={tokenId}
-          onChange={(e) => setTokenId(e.target.value)}
-          placeholder="ticket-1"
-          required
-        />
-        <label>Presented account</label>
-        <input
-          data-testid="door-account"
-          value={claimed}
-          onChange={(e) => setClaimed(e.target.value)}
-          placeholder="guest.testnet"
-          required
-        />
+        <div className="row">
+          <div>
+            <label>Token ID</label>
+            <input
+              data-testid="door-token"
+              value={tokenId}
+              onChange={(e) => setTokenId(e.target.value)}
+              placeholder="ticket-1"
+              required
+            />
+          </div>
+          <div>
+            <label>Presented account</label>
+            <input
+              data-testid="door-account"
+              value={claimed}
+              onChange={(e) => setClaimed(e.target.value)}
+              placeholder="guest.testnet"
+              required
+            />
+          </div>
+        </div>
         <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="verify-btn">
           Verify on-chain owner
         </button>
