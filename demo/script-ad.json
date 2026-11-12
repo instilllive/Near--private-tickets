@@ -1,0 +1,42 @@
+[
+  [
+    "hook",
+    "People screenshot tickets. Scalpers flip them.",
+    "People screenshot tickets. Scalpers flip them."
+  ],
+  [
+    "mint",
+    "The host mints a ticket with a one NEAR cap and a five percent royalty.",
+    "The host mints a ticket with a 1 NEAR cap and a 5% royalty."
+  ],
+  [
+    "overcap",
+    "List over the cap, and the contract rejects it.",
+    "List over the cap, and the contract rejects it."
+  ],
+  [
+    "resale",
+    "Fair sale. Point nine five to the seller. Point zero five to the host.",
+    "Fair sale. 0.95 to the seller. 0.05 to the host."
+  ],
+  [
+    "door",
+    "The door admits the owner. The old one is denied.",
+    "The door admits the owner. The old one is denied."
+  ],
+  [
+    "souvenir",
+    "Check in, and it becomes a Was There souvenir. Returning guest.",
+    "Check in, and it becomes a Was There souvenir. Returning guest."
+  ],
+  [
+    "devices",
+    "Use it here, on your phone. Here, on your iPad. And here, on your computer.",
+    "Use it here, on your phone. Here, on your iPad. And here, on your computer."
+  ],
+  [
+    "close",
+    "Private Tickets, at near-private-tickets.netlify.app. Built on NEAR.",
+    "near-private-tickets.netlify.app. Built on NEAR."
+  ]
+]

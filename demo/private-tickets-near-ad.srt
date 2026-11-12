@@ -1,0 +1,32 @@
+1
+00:00:00,000 --> 00:00:02,796
+People screenshot tickets. Scalpers flip them.
+
+2
+00:00:02,796 --> 00:00:07,296
+The host mints a ticket with a 1 NEAR cap and a 5% royalty.
+
+3
+00:00:07,296 --> 00:00:10,644
+List over the cap, and the contract rejects it.
+
+4
+00:00:10,644 --> 00:00:15,912
+Fair sale. 0.95 to the seller. 0.05 to the host.
+
+5
+00:00:15,912 --> 00:00:19,380
+The door admits the owner. The old one is denied.
+
+6
+00:00:19,380 --> 00:00:23,808
+Check in, and it becomes a Was There souvenir. Returning guest.
+
+7
+00:00:23,520 --> 00:00:29,172
+Use it here, on your phone. Here, on your iPad. And here, on your computer.
+
+8
+00:00:28,907 --> 00:00:34,891
+near-private-tickets.netlify.app. Built on NEAR.
+

@@ -18,6 +18,8 @@ demo/rec/
 demo/build/
 demo/tts/*.mp3
 demo/tts/*.json
+demo/tts-ad/*.mp3
+demo/tts-ad/*.json
 demo/package-lock.json
 app/dist/
 
