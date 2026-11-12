@@ -1,9 +1,9 @@
 [
   ["hook", "People screenshot tickets. Hosts can't tell who actually holds the pass.", "People screenshot tickets. Hosts can't tell who actually holds the pass."],
-  ["mint", "So on NEAR testnet, the host mints an NEP-171 ticket straight to the guest's account.", "The host mints an NEP-171 ticket to the guest's account."],
-  ["owner", "The contract is the source of truth. Right now, the guest owns this ticket.", "The contract is the source of truth. The guest owns this ticket."],
-  ["transfer", "The guest transfers it to a buyer. Provenance stays on chain.", "The guest transfers it to a buyer. Provenance stays on chain."],
-  ["admit", "At the door, we ask the contract who owns it. The buyer is admitted.", "At the door, the buyer is admitted."],
-  ["deny", "The previous owner is denied.", "The previous owner is denied."],
-  ["close", "Ownership, trading, and provenance on NEAR. Events stay in the app. Built at NEAR HACKATHON.", "Ownership, trading, and provenance on NEAR. Built at NEAR HACKATHON."]
+  ["mint", "On NEAR testnet, the host mints a ticket with a one NEAR resale cap and a five percent royalty.", "The host mints a ticket with a 1 NEAR resale cap and a 5% royalty."],
+  ["overcap", "List it over the cap, and the contract rejects the sale.", "List it over the cap, and the contract rejects the sale."],
+  ["resale", "List at the cap, and a buyer can purchase. The seller gets ninety-five percent. The host gets the royalty.", "List at the cap, and a buyer can purchase. Seller 95%, host royalty 5%."],
+  ["door", "At the door, the buyer is admitted. The previous owner is denied.", "At the door, the buyer is admitted. The previous owner is denied."],
+  ["souvenir", "The host checks them in. The ticket becomes a Was There souvenir, and it can't be resold.", "The host checks them in. It becomes a Was There souvenir that can't be resold."],
+  ["close", "That buyer is now a returning guest. near-private-tickets.netlify.app. Built on NEAR.", "The buyer is now a returning guest. near-private-tickets.netlify.app. Built on NEAR."]
 ]

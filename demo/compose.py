@@ -85,7 +85,7 @@ def build_bg_and_frame():
     for i, c in enumerate([(255, 95, 86), (255, 189, 46), (39, 201, 63)]):
         d.ellipse((1013 + i * 24, 149, 1027 + i * 24, 163), fill=c + (255,))
     d.rounded_rectangle((1100, 145, 1760, 167), 11, fill=(8, 7, 6, 255))
-    d.text((1430, 156), "localhost:5174  ·  Private Tickets  ·  testnet",
+    d.text((1430, 156), "near-private-tickets.netlify.app  ·  testnet",
            font=font(MONO, 14), fill=DIM + (255,), anchor="mm")
     m = Image.new("L", lay.size, 0)
     ImageDraw.Draw(m).rounded_rectangle((DK["x"], DK["y"], DK["x"] + DK["w"], DK["y"] + DK["h"]), 8, fill=255)
@@ -117,36 +117,36 @@ def build_timeline():
     # deny: deny_click -> deny_shown + hold
     # close: deny_shown -> end
     mapping = {
-        "hook": ("ready", "event_saved"),
-        "mint": ("mint_click", "mint_done"),
-        "owner": ("owner_click", "owner_shown"),
-        "transfer": ("transfer_click", "transfer_done"),
-        "admit": ("admit_click", "admit_shown"),
-        "deny": ("deny_click", "deny_shown"),
-        "close": ("deny_shown", "end"),
+        "hook": [("ready", "event_saved")],
+        "mint": [("mint_fields", "mint_done")],
+        "overcap": [("overcap_click", "overcap_shown")],
+        "resale": [("list_click", "list_done"), ("buy_click", "buy_done")],
+        "door": [("admit_click", "admit_shown"), ("deny_click", "deny_shown")],
+        "souvenir": [("checkin_click", "checkin_done"), ("checkin_done", "souvenir_shown")],
+        "close": [("souvenir_shown", "end")],
     }
     # Use desktop marks as the canonical visual length, but we'll cut each
     # device at its own marks (they should be close).
     M = marks["desktop"]
     segs = []
     t = 0.0
-    HOLD = 2.0
+    # Target lengths leave room for a 2s result hold on each beat
+    caps = {"hook": 5.0, "mint": 16.0, "overcap": 10.0, "resale": 18.0, "door": 14.0, "souvenir": 14.0, "close": 7.0}
     for k, _, sub in script:
-        a, b = mapping[k]
-        vis = max(0.4, M[b] - M[a])
-        # Keep result visible after the wait; never shorter than the voice + small pad
-        length = max(voice[k] + 0.35, vis + (HOLD if k != "close" else 0.4))
-        # If the on-chain wait is long, keep it (real) but cap extreme dead air
-        if length > 22 and k in ("mint", "transfer"):
-            length = max(voice[k] + 6.0, 16.0)
+        beats = mapping[k]
+        vis = sum(max(0.4, M[b] - M[a]) for a, b in beats)
+        length = max(voice[k] + 0.35, vis + (2.0 if k != "close" else 0.4))
+        if k in caps and length > caps[k]:
+            length = max(voice[k] + 1.2, caps[k])
         segs.append({
             "key": k,
             "start": t,
             "duration": length,
             "voice": voice[k],
             "sub": sub,
-            "mark_a": a,
-            "mark_b": b,
+            "beats": [{"mark_a": a, "mark_b": b} for a, b in beats],
+            "mark_a": beats[0][0],
+            "mark_b": beats[-1][1],
         })
         t += length
     return segs, marks
@@ -206,39 +206,101 @@ def render_visual(segs, marks, total):
     for s in segs:
         k = s["key"]
         D = s["duration"]
+        beats = s.get("beats") or [{"mark_a": s["mark_a"], "mark_b": s["mark_b"]}]
+        nbeats = len(beats)
+        # Reserve a readable hold on the last frame of each beat
+        hold = 1.2 if s["key"] == "close" else (2.2 if nbeats == 1 else 2.0)
+        play_budget = max(0.8, D - hold * nbeats)
+        # Weight play time by visual span, but keep a minimum so short beats still move
+        vis_list = [max(0.4, marks["desktop"][b["mark_b"]] - marks["desktop"][b["mark_a"]]) for b in beats]
+        raw = sum(vis_list)
+        plays = [max(0.6, play_budget * (v / raw)) for v in vis_list]
+        scale = play_budget / sum(plays)
+        plays = [p * scale for p in plays]
+
+        def device_filter(idx, box, name):
+            parts = []
+            labels = []
+            M = marks[name]
+            for bi, beat in enumerate(beats):
+                a = M[beat["mark_a"]]
+                b = M[beat["mark_b"]]
+                vis = max(0.4, b - a)
+                tail = 0.45  # stay on the result; do not run into the next action
+                play = plays[bi]
+                src_lab = f"{idx}b{bi}" if nbeats > 1 else str(idx)
+                # For multi-beat, we need split inputs; build via trim in the filter when one input
+                if vis >= play:
+                    factor = vis / play
+                    filt = (f"[{src_lab}]fps={FPS},trim=duration={vis+tail:.3f},setpts=PTS-STARTPTS,"
+                            f"setpts=PTS/{factor:.5f},scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
+                            f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration={hold+0.5:.3f},"
+                            f"trim=duration={play+hold:.3f},setpts=PTS-STARTPTS[p{idx}b{bi}];")
+                else:
+                    filt = (f"[{src_lab}]fps={FPS},trim=duration={vis+tail:.3f},setpts=PTS-STARTPTS,"
+                            f"scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
+                            f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration={play+hold-vis+1:.3f},"
+                            f"trim=duration={play+hold:.3f},setpts=PTS-STARTPTS[p{idx}b{bi}];")
+                parts.append(filt)
+                labels.append(f"[p{idx}b{bi}]")
+            if nbeats == 1:
+                return "".join(parts).replace(f"[p{idx}b0]", f"[s{idx}]").replace(f"[{idx}b0]", f"[{idx}]")
+            concat = "".join(labels) + f"concat=n={nbeats}:v=1:a=0,trim=duration={D:.3f},setpts=PTS-STARTPTS[s{idx}];"
+            return "".join(parts) + concat
+
+        # Inputs: for a single beat, 3 device files from mark_a. For multiple beats, one file
+        # per beat per device (trim with -ss). Layout: 0=bg, then devices, last=frame.
         ins = []
-        # inputs: 0=bg, 1=phone, 2=ipad, 3=desktop, 4=frame
-        # For each device, take from mark_a, lasting (mark_b-mark_a), setpts to fit D
-        # If vis < D, tpad clone (freeze). If vis > D, speed up slightly so the result still lands before the end.
+        input_map = []  # (device_name, input_index_start)
+        fi = 1
         for n in ("phone", "ipad", "desktop"):
             M = marks[n]
-            a = M[s["mark_a"]]
-            b = M[s["mark_b"]]
-            vis = max(0.4, b - a)
-            # include a short tail after mark_b so the result is on screen
-            tail = 0.35
             src = ROOT / "rec" / n / f"{n}.webm"
-            ins.append(f'-ss {max(0, a):.3f} -t {vis + tail:.3f} -i "{src}"')
+            input_map.append((n, fi))
+            for beat in beats:
+                a = M[beat["mark_a"]]
+                b = M[beat["mark_b"]]
+                vis = max(0.4, b - a)
+                ins.append(f'-ss {max(0, a):.3f} -t {vis + 0.45:.3f} -i "{src}"')
+                fi += 1
         inputs = f'-loop 1 -framerate {FPS} -t {D + 0.5:.3f} -i "{ROOT / "build" / "bg.png"}" ' + " ".join(ins) + f' -loop 1 -i "{ROOT / "build" / "trio_frame.png"}"'
-        # After inputs: 0 bg, 1 phone, 2 ipad, 3 desktop, 4 frame
-        def scale_pad(idx, box, vis):
-            # Speed so vis maps to min(vis, D-0.8) leaving freeze room, or to D if vis is short
-            if vis >= D:
-                factor = vis / D  # >1 means speed up (setpts PTS/factor)
-                return (f"[{idx}]fps={FPS},setpts=PTS/{factor:.5f},scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
-                        f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration=2,trim=duration={D:.3f},setpts=PTS-STARTPTS[s{idx}];")
-            else:
-                return (f"[{idx}]fps={FPS},scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
-                        f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration={D-vis+2:.3f},trim=duration={D:.3f},setpts=PTS-STARTPTS[s{idx}];")
-        vis_ref = max(0.4, marks["desktop"][s["mark_b"]] - marks["desktop"][s["mark_a"]])
+        frame_idx = fi  # last input
+
+        def wire_device(dev_idx, box, name, in_start):
+            # Rewrite device_filter to use the actual input indices
+            M = marks[name]
+            parts = []
+            labels = []
+            for bi, beat in enumerate(beats):
+                a = M[beat["mark_a"]]
+                b = M[beat["mark_b"]]
+                vis = max(0.4, b - a)
+                tail = 0.45
+                play = plays[bi]
+                src_lab = str(in_start + bi)
+                if vis >= play:
+                    factor = vis / play
+                    filt = (f"[{src_lab}]fps={FPS},setpts=PTS/{factor:.5f},scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
+                            f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration={hold+0.5:.3f},"
+                            f"trim=duration={play+hold:.3f},setpts=PTS-STARTPTS[p{dev_idx}b{bi}];")
+                else:
+                    filt = (f"[{src_lab}]fps={FPS},scale={box['w']}:{box['h']}:force_original_aspect_ratio=increase:flags=lanczos,"
+                            f"crop={box['w']}:{box['h']},tpad=stop_mode=clone:stop_duration={play+hold-vis+1:.3f},"
+                            f"trim=duration={play+hold:.3f},setpts=PTS-STARTPTS[p{dev_idx}b{bi}];")
+                parts.append(filt)
+                labels.append(f"[p{dev_idx}b{bi}]")
+            if nbeats == 1:
+                return "".join(parts).replace(f"[p{dev_idx}b0]", f"[s{dev_idx}]")
+            return "".join(parts) + "".join(labels) + f"concat=n={nbeats}:v=1:a=0,trim=duration={D:.3f},setpts=PTS-STARTPTS[s{dev_idx}];"
+
         fc = (
-            scale_pad(1, P, max(0.4, marks["phone"][s["mark_b"]] - marks["phone"][s["mark_a"]]))
-            + scale_pad(2, I, max(0.4, marks["ipad"][s["mark_b"]] - marks["ipad"][s["mark_a"]]))
-            + scale_pad(3, DK, vis_ref)
+            wire_device(1, P, "phone", input_map[0][1])
+            + wire_device(2, I, "ipad", input_map[1][1])
+            + wire_device(3, DK, "desktop", input_map[2][1])
             + f"[0][s1]overlay={P['x']}:{P['y']}:shortest=1[a];"
             + f"[a][s2]overlay={I['x']}:{I['y']}[b];"
             + f"[b][s3]overlay={DK['x']}:{DK['y']}[c];"
-            + f"[c][4]overlay=0:0,format=yuv420p,trim=duration={D:.3f},setpts=PTS-STARTPTS[v]"
+            + f"[c][{frame_idx}]overlay=0:0,format=yuv420p,trim=duration={D:.3f},setpts=PTS-STARTPTS[v]"
         )
         out = ROOT / "build" / "seg" / f"{k}.mp4"
         sh(f'ffmpeg -y -v error {inputs} -filter_complex "{fc}" -map "[v]" -an -c:v libx264 -preset medium -crf 18 -r {FPS} "{out}"')

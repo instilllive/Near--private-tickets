@@ -32,6 +32,36 @@ function loadDemoAccounts() {
   };
 }
 
+async function scrollTo(page, testId) {
+  const loc = page.getByTestId(testId);
+  if (await loc.count()) {
+    await loc.first().scrollIntoViewIfNeeded();
+  }
+}
+
+async function switchRole(page, role, ids) {
+  const account = ids[role];
+  await page.evaluate((r) => {
+    if (!window.__PTIX_DEMO_ROLES__) throw new Error("recording wallet missing");
+    window.__PTIX_DEMO_ROLES__.switchTo(r);
+  }, role);
+  await page.waitForFunction(
+    (id) => {
+      const el = document.querySelector('[data-testid="session-account"]');
+      return !!(el && el.textContent && el.textContent.includes(id));
+    },
+    account,
+    { timeout: 15000 }
+  );
+}
+
+async function fillToken(page, testId, token) {
+  if (!token) return;
+  const box = page.getByTestId(testId);
+  const current = await box.inputValue();
+  if (current !== token) await box.fill(token);
+}
+
 async function run(browser, name, vp, ids, demo) {
   const dir = path.join(REC, name);
   fs.mkdirSync(dir, { recursive: true });
@@ -44,6 +74,8 @@ async function run(browser, name, vp, ids, demo) {
   });
   await context.addInitScript((payload) => {
     sessionStorage.setItem("ptix-near:demo-accounts:v1", JSON.stringify(payload));
+    try { localStorage.removeItem("ptix-near:events:v1"); } catch { /* ignore */ }
+    try { localStorage.removeItem("ptix-near:door:v1"); } catch { /* ignore */ }
   }, demo);
 
   const page = await context.newPage();
@@ -57,29 +89,47 @@ async function run(browser, name, vp, ids, demo) {
   const txs = {};
 
   await page.goto(URL, { waitUntil: "networkidle" });
-  await page.getByTestId("session-bar").waitFor({ timeout: 15000 });
+  await page.getByTestId("session-bar").waitFor({ timeout: 20000 });
+  await page.waitForFunction(
+    (id) => {
+      const el = document.querySelector('[data-testid="session-account"]');
+      return !!(el && el.textContent && el.textContent.includes(id));
+    },
+    ids.host,
+    { timeout: 20000 }
+  );
   mark("ready");
-  await wait(800);
+  await wait(700);
 
-  // Event
   await page.getByTestId("tab-event").click();
   const nameInput = page.getByTestId("event-name");
   await nameInput.fill("");
   await nameInput.pressSequentially("NEAR Demo Night", { delay: 40 });
-  await wait(300);
+  await wait(250);
   await page.getByTestId("save-event").click();
   mark("event_saved");
-  await wait(700);
+  await wait(600);
+
   const guestInput = page.getByTestId("guest-account");
   await guestInput.click();
   await guestInput.fill("");
-  await guestInput.pressSequentially(ids.guest, { delay: 25 });
+  await guestInput.pressSequentially(ids.guest, { delay: 20 });
+  await wait(200);
+  mark("mint_fields");
+  const capInput = page.getByTestId("resale-cap");
+  await capInput.fill("");
+  await capInput.pressSequentially("1", { delay: 80 });
+  await wait(200);
+  const royaltyInput = page.getByTestId("royalty-bps");
+  await royaltyInput.fill("");
+  await royaltyInput.pressSequentially("5", { delay: 80 });
+  await scrollTo(page, "mint-btn");
   await wait(400);
   mark("mint_click");
   await page.getByTestId("mint-btn").click();
   const mintResult = page.getByTestId("mint-result");
   await mintResult.waitFor({ timeout: 120000 });
-  mark("mint_done");
+  await scrollTo(page, "mint-result");
   const mintText = await mintResult.innerText();
   const mintLink = await mintResult.locator("a").getAttribute("href").catch(() => null);
   txs.mintText = mintText;
@@ -87,71 +137,103 @@ async function run(browser, name, vp, ids, demo) {
   const tokenMatch = mintText.match(/ticket-\d+/);
   txs.token = tokenMatch ? tokenMatch[0] : null;
   console.log(name, "token", txs.token, "mint", txs.mintExplorer);
-  await wait(2500);
+  await wait(1600);
 
-  // Ticket / owner
   await page.getByTestId("tab-ticket").click();
-  await wait(500);
-  if (txs.token) {
-    const tokenBox = page.getByTestId("token-id");
-    const current = await tokenBox.inputValue();
-    if (current !== txs.token) await tokenBox.fill(txs.token);
-  }
-  mark("owner_click");
+  await wait(400);
+  await fillToken(page, "token-id", txs.token);
   await page.getByTestId("show-owner").click();
   await page.getByTestId("current-owner").waitFor({ timeout: 30000 });
   const owner1 = (await page.getByTestId("current-owner").innerText()).trim();
   txs.ownerAfterMint = owner1;
   if (!owner1.includes(ids.guest)) {
-    throw new Error(`${name}: expected guest owner, got ${owner1}`);
+    throw new Error(`${name}: expected guest owner after mint, got ${owner1}`);
   }
-  mark("owner_shown");
-  await wait(2500);
+  await scrollTo(page, "ticket-record");
+  mark("mint_done");
+  await wait(2000);
 
-  // Switch to guest and transfer
-  await page.getByTestId("role-guest").click();
-  await page.getByTestId("session-account").waitFor();
-  await wait(600);
-  const recv = page.getByTestId("receiver");
-  await recv.click();
-  await recv.fill("");
-  await recv.pressSequentially(ids.buyer, { delay: 25 });
+  await switchRole(page, "guest", ids);
   await wait(400);
-  mark("transfer_click");
-  await page.getByTestId("transfer-btn").click();
+  const priceBox = page.getByTestId("list-price");
+  await priceBox.click();
+  await priceBox.fill("");
+  await priceBox.pressSequentially("2", { delay: 80 });
+  await scrollTo(page, "list-resale");
+  await wait(350);
+  mark("overcap_click");
+  await page.getByTestId("list-resale").click();
+  await page.getByTestId("list-error").waitFor({ timeout: 120000 });
+  const overText = (await page.getByTestId("list-error").innerText()).trim();
+  txs.overCap = overText;
+  if (!/exceeds the host resale cap/i.test(overText)) {
+    throw new Error(`${name}: expected over-cap rejection, got ${overText}`);
+  }
+  await scrollTo(page, "list-error");
+  mark("overcap_shown");
+  await wait(2200);
+
+  await priceBox.fill("");
+  await priceBox.pressSequentially("1", { delay: 80 });
+  await wait(300);
+  mark("list_click");
+  await page.getByTestId("list-resale").click();
   await page.getByTestId("transfer-result").waitFor({ timeout: 120000 });
-  await page.getByTestId("show-owner").click();
   await page.waitForFunction(
-    (buyer) => {
-      const el = document.querySelector('[data-testid="current-owner"]');
-      return !!(el && el.textContent && el.textContent.includes(buyer));
+    () => {
+      const rec = document.querySelector('[data-testid="ticket-record"]');
+      return !!(rec && /listed at/i.test(rec.textContent || ""));
     },
-    ids.buyer,
     { timeout: 30000 }
   );
-  mark("transfer_done");
-  txs.transferExplorer = await page
+  txs.listExplorer = await page
     .getByTestId("transfer-result")
     .locator("a")
     .getAttribute("href")
     .catch(() => null);
-  const owner2 = (await page.getByTestId("current-owner").innerText()).trim();
-  txs.ownerAfterTransfer = owner2;
-  if (!owner2.includes(ids.buyer)) {
-    throw new Error(`${name}: expected buyer owner, got ${owner2}`);
+  await scrollTo(page, "transfer-result");
+  mark("list_done");
+  await wait(1500);
+
+  await switchRole(page, "buyer", ids);
+  await wait(500);
+  await scrollTo(page, "buy-resale");
+  mark("buy_click");
+  await page.getByTestId("buy-resale").click();
+  await page.getByTestId("transfer-result").waitFor({ timeout: 120000 });
+  await page.waitForFunction(
+    (buyer) => {
+      const el = document.querySelector('[data-testid="current-owner"]');
+      const tx = document.querySelector('[data-testid="transfer-result"]');
+      return !!(
+        el && el.textContent && el.textContent.includes(buyer) &&
+        tx && /Seller received/i.test(tx.textContent || "")
+      );
+    },
+    ids.buyer,
+    { timeout: 45000 }
+  );
+  txs.buyExplorer = await page
+    .getByTestId("transfer-result")
+    .locator("a")
+    .getAttribute("href")
+    .catch(() => null);
+  txs.buyText = (await page.getByTestId("transfer-result").innerText()).trim();
+  txs.ownerAfterBuy = (await page.getByTestId("current-owner").innerText()).trim();
+  if (!txs.ownerAfterBuy.includes(ids.buyer)) {
+    throw new Error(`${name}: expected buyer owner after resale, got ${txs.ownerAfterBuy}`);
   }
-  console.log(name, "transfer", txs.transferExplorer, "owner", owner2);
+  await scrollTo(page, "transfer-result");
+  mark("buy_done");
   await wait(2500);
 
-  // Door: admit buyer
   await page.getByTestId("tab-door").click();
   await wait(400);
-  await page.getByTestId("role-buyer").click();
-  await wait(500);
-  if (txs.token) {
-    const dt = page.getByTestId("door-token");
-    if ((await dt.inputValue()) !== txs.token) await dt.fill(txs.token);
-  }
+  await fillToken(page, "door-token", txs.token);
+  const doorAccount = page.getByTestId("door-account");
+  await doorAccount.fill("");
+  await doorAccount.pressSequentially(ids.buyer, { delay: 15 });
+  await wait(300);
   mark("admit_click");
   await page.getByTestId("verify-btn").click();
   await page.getByTestId("verdict").waitFor({ timeout: 30000 });
@@ -160,12 +242,13 @@ async function run(browser, name, vp, ids, demo) {
   if (!/^Admit/i.test(admitText)) {
     throw new Error(`${name}: expected Admit, got ${admitText}`);
   }
+  await scrollTo(page, "verdict");
   mark("admit_shown");
-  await wait(2800);
+  await wait(1800);
 
-  // Door: deny previous owner
-  await page.getByTestId("door-account").fill(ids.guest);
-  await wait(400);
+  await doorAccount.fill("");
+  await doorAccount.pressSequentially(ids.guest, { delay: 15 });
+  await wait(300);
   mark("deny_click");
   await page.getByTestId("verify-btn").click();
   await page.waitForFunction(
@@ -180,11 +263,64 @@ async function run(browser, name, vp, ids, demo) {
   if (!/^Deny/i.test(denyText)) {
     throw new Error(`${name}: expected Deny, got ${denyText}`);
   }
+  await scrollTo(page, "verdict");
   mark("deny_shown");
-  await wait(4000);
+  await wait(1800);
+
+  await switchRole(page, "host", ids);
+  await wait(400);
+  await doorAccount.fill("");
+  await doorAccount.pressSequentially(ids.buyer, { delay: 15 });
+  await wait(250);
+  await page.getByTestId("verify-btn").click();
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-testid="verdict"]');
+      return el && /^Admit/i.test(el.textContent || "");
+    },
+    { timeout: 30000 }
+  );
+  await page.getByTestId("check-in-btn").waitFor({ timeout: 15000 });
+  await scrollTo(page, "check-in-btn");
+  await wait(300);
+  mark("checkin_click");
+  await page.getByTestId("check-in-btn").click();
+  await page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-testid="verdict"]');
+      const ret = document.querySelector('[data-testid="door-returning"]');
+      return !!(el && /souvenir/i.test(el.textContent || "") && ret);
+    },
+    { timeout: 120000 }
+  );
+  txs.checkInExplorer = await page.locator(".ok a").last().getAttribute("href").catch(() => null);
+  await scrollTo(page, "verdict");
+  mark("checkin_done");
+  await wait(1800);
+
+  await page.getByTestId("tab-ticket").click();
+  await wait(400);
+  await fillToken(page, "token-id", txs.token);
+  await page.getByTestId("show-owner").click();
+  await page.getByTestId("souvenir-badge").waitFor({ timeout: 30000 });
+  await page.getByTestId("returning-guest").waitFor({ timeout: 15000 });
+  const souvenir = (await page.getByTestId("souvenir-badge").innerText()).trim();
+  txs.souvenir = souvenir;
+  if (!/Was there/i.test(souvenir)) {
+    throw new Error(`${name}: expected Was there badge, got ${souvenir}`);
+  }
+  await scrollTo(page, "souvenir-badge");
+  mark("souvenir_shown");
+  await wait(2500);
+
+  await page.evaluate(() => {
+    const foot = document.querySelector(".site-footer");
+    if (foot) foot.scrollIntoView({ block: "end" });
+  });
+  await wait(2200);
   mark("end");
 
-  await page.screenshot({ path: path.join(dir, "end.png") });
+  await page.screenshot({ path: path.join(dir, "end.png"), fullPage: false });
   const video = page.video();
   await context.close();
   const dest = path.join(dir, `${name}.webm`);

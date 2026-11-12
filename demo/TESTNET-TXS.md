@@ -1,22 +1,28 @@
 # Demo recording testnet transactions
 
-All of these were signed on NEAR testnet during the three-device demo recording. Each viewport minted and transferred its own ticket so the footage is real, not replayed.
+All of these were signed on NEAR testnet during the three-device demo recording. Each viewport minted, listed, sold and checked in its own ticket so the footage is real, not replayed.
 
-Contract: [`ptix74d83134.testnet`](https://testnet.nearblocks.io/address/ptix74d83134.testnet)
+Contract: [`ptixcb96a65fb.testnet`](https://testnet.nearblocks.io/address/ptixcb96a65fb.testnet)
 
-## Phone (ticket-3)
+Over-cap listings were rejected by the contract in every recording with: "Listing rejected: the price exceeds the host resale cap." Every resale paid the seller 0.95 N and the host 0.05 N. Door checks are view calls (`can_enter`) and do not create transactions; in every recording the buyer was admitted and the previous owner (the guest) was denied.
 
-- Mint: https://testnet.nearblocks.io/txns/3DfeX1RkyRBWtRfFoSihpemXerxNjk2xknkcsohmgdnN
-- Transfer: https://testnet.nearblocks.io/txns/CJGyaa2mw38nYiiMoYU8ZAy5FqiZd54XpmjmYEjVLB6v
+## Phone (ticket-5)
 
-## iPad (ticket-4)
+- Mint: https://testnet.nearblocks.io/txns/5e8LQLPZR7goF3D7pukpaVeYT1mVKgHeHfLsx1tWh3Jg
+- List at cap: https://testnet.nearblocks.io/txns/AKBEEg8gLqPVDD3FQmQBN8P2oKDuMbQtUfAADcP71Riu
+- Resale buy: https://testnet.nearblocks.io/txns/9BbdgRXXsC3XfoSf4mVdbjKB6NfpPpyU6zokFBxhLBff
+- Check-in: https://testnet.nearblocks.io/txns/CnhAjYnexqePeDGhyeuhWu4d7SDjYhaA94vPCh9rCyx5
 
-- Mint: https://testnet.nearblocks.io/txns/3FGrRSaApeCZ1e7sEJMmmCbL1B85Phmv5YpaecKq4ApJ
-- Transfer: https://testnet.nearblocks.io/txns/DWGnX4mQdVmM7pfruwjCrxDY3iFCQSpnTPsRXL2DU8wk
+## iPad (ticket-6)
 
-## Desktop (ticket-5)
+- Mint: https://testnet.nearblocks.io/txns/A6A7qDPCELuPY1uqBmthdbWs8zZVx7SLwGvTMMSAxSi4
+- List at cap: https://testnet.nearblocks.io/txns/7Adtt9pEmytKu461oWmbFJUrmAfnS3hvG5hQNxTWViM3
+- Resale buy: https://testnet.nearblocks.io/txns/7eBNkk2TjCM8uQVjGdPQQBqPdJt8kh8CY5dbYdJhFEo4
+- Check-in: https://testnet.nearblocks.io/txns/B2iex4ggws9yXdkFTK45Y4dpBsYhEsRxnd3i6uHJuo4p
 
-- Mint: https://testnet.nearblocks.io/txns/4BVLAP5paYtSTitZi27hLsrWVXgbyJ5UAUyV1p6hWzQb
-- Transfer: https://testnet.nearblocks.io/txns/B9C8GBGDA87aZr7vWAJpGwMbhdMGtjdrrKueRmjrw6UK
+## Desktop (ticket-7)
 
-Door checks are view calls (`is_owner`) and do not create transactions. In every recording the buyer was admitted and the previous owner (the guest) was denied.
+- Mint: https://testnet.nearblocks.io/txns/38NTkJdNgM4ALLyWj2W1PLntCd6S6xc9QedMo7iwVCxQ
+- List at cap: https://testnet.nearblocks.io/txns/HyvBLH8y7CtfnBaV7NVBXLa8Akk1SHFKmWJonrQ3qXWF
+- Resale buy: https://testnet.nearblocks.io/txns/9885VHuY9fFwgQ6S1Kz6Bera9RW9JAK4EZB2mtYvNErD
+- Check-in: https://testnet.nearblocks.io/txns/EfAN1b6eFLucwHbEeLTP3mHnW8CiNpfdN3Bmv1peuejQ

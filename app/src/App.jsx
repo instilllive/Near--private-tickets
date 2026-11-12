@@ -39,6 +39,19 @@ function clearLegacyKeys() {
   }
 }
 
+function friendlyError(e) {
+  const msg = e?.message || String(e);
+  if (/exceeds the host resale cap/i.test(msg)) {
+    return "Listing rejected: the price exceeds the host resale cap.";
+  }
+  if (/souvenir|already used/i.test(msg)) {
+    return "This ticket is a souvenir now and cannot be resold.";
+  }
+  const panic = msg.match(/panic_msg(?:\":\s*\"|:\s*")([^"]+)/i);
+  if (panic) return panic[1];
+  return msg;
+}
+
 export default function App() {
   const [tab, setTab] = useState("event");
   const [accountId, setAccountId] = useState("");
@@ -82,14 +95,14 @@ export default function App() {
       throw new Error(msg);
     }
     setError("");
-    setStatus("Approve the transaction in your wallet…");
+    setStatus("Sending on NEAR testnet…");
     try {
       const result = await fn();
       setStatus("");
       return result;
     } catch (e) {
       setStatus("");
-      setError(e.message || String(e));
+      setError(friendlyError(e));
       throw e;
     }
   }
@@ -343,7 +356,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
     const out = await withWallet(() =>
       transferTicket({ receiverId: receiver.trim(), tokenId: tokenId.trim() })
     );
-    setTx(out);
+    setTx({ ...out, kind: "transfer" });
     await refresh();
   }
 
@@ -358,11 +371,16 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
 
   async function list(e) {
     e.preventDefault();
-    const priceYocto = parseNear(listPrice);
-    if (!priceYocto) throw new Error("Enter a listing price in NEAR.");
-    const out = await withWallet(() => listResale({ tokenId: tokenId.trim(), priceYocto }));
-    setTx(out);
-    await refresh();
+    setErr("");
+    try {
+      const priceYocto = parseNear(listPrice);
+      if (!priceYocto) throw new Error("Enter a listing price in NEAR.");
+      const out = await withWallet(() => listResale({ tokenId: tokenId.trim(), priceYocto }));
+      setTx({ ...out, kind: "list", priceYocto });
+      await refresh();
+    } catch (e2) {
+      setErr(friendlyError(e2));
+    }
   }
 
   async function cancel(e) {
@@ -376,8 +394,11 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
     e.preventDefault();
     const priceYocto = record?.listing?.price;
     if (!priceYocto) throw new Error("This ticket is not listed.");
+    const sale = BigInt(priceYocto);
+    const royalty = sale * BigInt(record.royalty_bps || 0) / 10000n;
+    const sellerCut = sale - royalty;
     const out = await withWallet(() => buyResale({ tokenId: tokenId.trim(), priceYocto }));
-    setTx(out);
+    setTx({ ...out, kind: "buy", priceYocto, royaltyYocto: royalty.toString(), sellerYocto: sellerCut.toString() });
     await refresh();
   }
 
@@ -491,6 +512,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
             </form>
           )
         )}
+        {err && <p className="err" data-testid="list-error">{err}</p>}
         <h3>Direct transfer</h3>
         <p className="muted">
           {accountId
@@ -512,7 +534,12 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
         </form>
         {tx?.hash && (
           <p className="ok" data-testid="transfer-result">
-            Transferred. <a href={explorerTx(tx.hash)}>View transaction</a>
+            {tx.kind === "buy"
+              ? `Sold. Seller received ${formatNear(tx.sellerYocto)} N. Host royalty ${formatNear(tx.royaltyYocto)} N. `
+              : tx.kind === "list"
+                ? `Listed at ${formatNear(tx.priceYocto)} N. `
+                : "Transferred. "}
+            <a href={explorerTx(tx.hash)}>View transaction</a>
           </p>
         )}
       </div>
@@ -564,7 +591,7 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
       };
     }
     setVerdict(result);
-    if (ok) {
+    if (result.ok) {
       const entry = {
         at: new Date().toISOString(),
         tokenId: tokenId.trim(),
@@ -634,13 +661,17 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
         <form
           onSubmit={async (e) => {
             e.preventDefault();
-            const out = await checkIn({ tokenId: tokenId.trim() });
-            setCheckTx(out);
-            const rec = await ticketRecord(tokenId.trim());
-            setRecord(rec);
-            setVerdict({ ok: false, reason: "Checked in on-chain. This ticket is now a souvenir badge." });
-            if (rec?.event_id && claimed.trim()) {
-              setReturning(Boolean(await hasAttended(claimed.trim(), rec.event_id)));
+            try {
+              const out = await checkIn({ tokenId: tokenId.trim() });
+              setCheckTx(out);
+              const rec = await ticketRecord(tokenId.trim());
+              setRecord(rec);
+              setVerdict({ ok: false, reason: "Checked in on-chain. This ticket is now a souvenir badge." });
+              if (rec?.event_id && claimed.trim()) {
+                setReturning(Boolean(await hasAttended(claimed.trim(), rec.event_id)));
+              }
+            } catch (err) {
+              setVerdict({ ok: false, reason: friendlyError(err) });
             }
           }}
         >

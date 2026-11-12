@@ -3,26 +3,26 @@
 People screenshot tickets. Hosts can't tell who actually holds the pass.
 
 2
-00:00:04,454 --> 00:00:18,106
-The host mints an NEP-171 ticket to the guest's account.
+00:00:04,454 --> 00:00:20,204
+The host mints a ticket with a 1 NEAR resale cap and a 5% royalty.
 
 3
-00:00:18,356 --> 00:00:23,941
-The contract is the source of truth. The guest owns this ticket.
+00:00:20,454 --> 00:00:30,204
+List it over the cap, and the contract rejects the sale.
 
 4
-00:00:24,191 --> 00:00:40,872
-The guest transfers it to a buyer. Provenance stays on chain.
+00:00:30,454 --> 00:00:48,204
+List at the cap, and a buyer can purchase. Seller 95%, host royalty 5%.
 
 5
-00:00:41,122 --> 00:00:49,733
-At the door, the buyer is admitted.
+00:00:48,454 --> 00:01:02,204
+At the door, the buyer is admitted. The previous owner is denied.
 
 6
-00:00:49,983 --> 00:00:58,383
-The previous owner is denied.
+00:01:02,454 --> 00:01:16,204
+The host checks them in. It becomes a Was There souvenir that can't be resold.
 
 7
-00:00:58,633 --> 00:01:04,687
-Ownership, trading, and provenance on NEAR. Built at NEAR HACKATHON.
+00:01:16,454 --> 00:01:22,460
+The buyer is now a returning guest. near-private-tickets.netlify.app. Built on NEAR.
 
