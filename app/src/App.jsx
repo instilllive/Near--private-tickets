@@ -1,10 +1,17 @@
 import { useEffect, useState } from "react";
 import {
   CONTRACT_ID,
+  buyResale,
+  canEnter,
+  cancelResale,
+  checkIn,
   explorerAccount,
   explorerTx,
-  isOwner,
+  formatNear,
+  hasAttended,
+  listResale,
   mintTicket,
+  parseNear,
   ticketRecord,
   tokensForOwner,
   transferTicket,
@@ -172,6 +179,8 @@ function EventPanel({ withWallet, connected, onMinted }) {
   const [date, setDate] = useState("2026-11-14");
   const [eventId, setEventId] = useState(events[0]?.id || "");
   const [guest, setGuest] = useState("");
+  const [cap, setCap] = useState("1");
+  const [royalty, setRoyalty] = useState("5");
   const [result, setResult] = useState(null);
 
   function addEvent(e) {
@@ -186,11 +195,19 @@ function EventPanel({ withWallet, connected, onMinted }) {
   async function mint(e) {
     e.preventDefault();
     const ev = events.find((x) => x.id === eventId) || { id: eventId, name };
+    const bps = Math.round(Number(royalty) * 100);
+    if (!Number.isFinite(bps) || bps < 0 || bps > 10000) {
+      throw new Error("Royalty must be between 0 and 100 percent.");
+    }
+    const maxResalePrice = parseNear(cap);
+    if (!maxResalePrice) throw new Error("Enter a max resale price in NEAR.");
     const out = await withWallet(() =>
       mintTicket({
         receiverId: guest.trim(),
         eventId: ev.id,
         eventName: ev.name,
+        maxResalePrice,
+        royaltyBps: bps,
       })
     );
     setResult(out);
@@ -245,6 +262,29 @@ function EventPanel({ withWallet, connected, onMinted }) {
             placeholder="guest.testnet"
             required
           />
+          <div className="row">
+            <div>
+              <label>Max resale (NEAR)</label>
+              <input
+                data-testid="resale-cap"
+                value={cap}
+                onChange={(e) => setCap(e.target.value)}
+                inputMode="decimal"
+                required
+              />
+            </div>
+            <div>
+              <label>Host royalty (%)</label>
+              <input
+                data-testid="royalty-bps"
+                value={royalty}
+                onChange={(e) => setRoyalty(e.target.value)}
+                inputMode="decimal"
+                required
+              />
+            </div>
+          </div>
+          <p className="muted">The contract rejects any later listing above this cap and pays the royalty to the event host.</p>
           <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="mint-btn" disabled={!connected}>
             Mint to guest
           </button>
@@ -264,14 +304,22 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
   const [record, setRecord] = useState(null);
   const [owned, setOwned] = useState([]);
   const [receiver, setReceiver] = useState("");
+  const [listPrice, setListPrice] = useState("");
   const [tx, setTx] = useState(null);
   const [err, setErr] = useState("");
+  const [returning, setReturning] = useState(false);
 
   async function lookup(e) {
     e?.preventDefault?.();
     setErr("");
     try {
-      setRecord(await ticketRecord(tokenId.trim()));
+      const rec = await ticketRecord(tokenId.trim());
+      setRecord(rec);
+      if (rec?.event_id && rec?.token?.owner_id) {
+        setReturning(Boolean(await hasAttended(rec.token.owner_id, rec.event_id)));
+      } else {
+        setReturning(false);
+      }
     } catch (e2) {
       setErr(e2.message || String(e2));
     }
@@ -296,8 +344,45 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
       transferTicket({ receiverId: receiver.trim(), tokenId: tokenId.trim() })
     );
     setTx(out);
-    setRecord(await ticketRecord(tokenId.trim()));
+    await refresh();
   }
+
+  async function refresh() {
+    const rec = await ticketRecord(tokenId.trim());
+    setRecord(rec);
+    if (rec?.event_id && rec?.token?.owner_id) {
+      setReturning(Boolean(await hasAttended(rec.token.owner_id, rec.event_id)));
+    }
+    return rec;
+  }
+
+  async function list(e) {
+    e.preventDefault();
+    const priceYocto = parseNear(listPrice);
+    if (!priceYocto) throw new Error("Enter a listing price in NEAR.");
+    const out = await withWallet(() => listResale({ tokenId: tokenId.trim(), priceYocto }));
+    setTx(out);
+    await refresh();
+  }
+
+  async function cancel(e) {
+    e.preventDefault();
+    const out = await withWallet(() => cancelResale({ tokenId: tokenId.trim() }));
+    setTx(out);
+    await refresh();
+  }
+
+  async function buy(e) {
+    e.preventDefault();
+    const priceYocto = record?.listing?.price;
+    if (!priceYocto) throw new Error("This ticket is not listed.");
+    const out = await withWallet(() => buyResale({ tokenId: tokenId.trim(), priceYocto }));
+    setTx(out);
+    await refresh();
+  }
+
+  const isOwnerConnected = !!(accountId && record?.token?.owner_id === accountId);
+  const attended = !!record?.attended_at;
 
   return (
     <div className="panel-grid">
@@ -336,6 +421,22 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
               <span className="record-meta mono">{record.event_id}</span>
               Owner: <span className="mono" data-testid="current-owner">{record.token.owner_id}</span>
             </p>
+            {attended && (
+              <p className="badge-row" data-testid="souvenir-badge">
+                <span className="badge">Was there</span>
+                <span className="muted">Souvenir badge · checked in on-chain. This ticket cannot be resold or reused at the door.</span>
+              </p>
+            )}
+            {returning && (
+              <p className="badge-row" data-testid="returning-guest">
+                <span className="badge returning">Returning guest</span>
+                <span className="muted">This account has a check-in for this event.</span>
+              </p>
+            )}
+            <p className="policy muted">
+              Resale cap {formatNear(record.max_resale_price)} N · host royalty {Number(record.royalty_bps) / 100}%
+              {record.listing ? ` · listed at ${formatNear(record.listing.price)} N` : " · not listed"}
+            </p>
             <h3>Provenance</h3>
             <ul className="history">
               {record.history.map((h, i) => (
@@ -349,7 +450,48 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
         {err && <p className="err">{err}</p>}
       </div>
       <div className="card">
-        <h2>Transfer</h2>
+        <h2>Resale and transfer</h2>
+        <p className="muted">
+          {attended
+            ? "This ticket is a souvenir now. It cannot be listed or transferred."
+            : accountId
+              ? "List at or below the host cap, buy a listed ticket, or transfer it directly."
+              : "Connect a testnet wallet to list, buy, or transfer."}
+        </p>
+        {record?.listing && !attended && (
+          <form onSubmit={buy} style={{ marginBottom: 16 }}>
+            <p>
+              Listed at <b>{formatNear(record.listing.price)} N</b> by{" "}
+              <span className="mono">{record.listing.seller}</span>
+            </p>
+            <button className="primary" type="submit" data-testid="buy-resale" disabled={!accountId || isOwnerConnected}>
+              Buy at cap-safe price
+            </button>
+          </form>
+        )}
+        {isOwnerConnected && !attended && (
+          record?.listing ? (
+            <form onSubmit={cancel} style={{ marginBottom: 16 }}>
+              <button type="submit" data-testid="cancel-resale">Cancel listing</button>
+            </form>
+          ) : (
+            <form onSubmit={list} style={{ marginBottom: 16 }}>
+              <label>List price (NEAR, max {record ? formatNear(record.max_resale_price) : "—"})</label>
+              <input
+                data-testid="list-price"
+                value={listPrice}
+                onChange={(e) => setListPrice(e.target.value)}
+                inputMode="decimal"
+                placeholder="1"
+                required
+              />
+              <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="list-resale">
+                List for resale
+              </button>
+            </form>
+          )
+        )}
+        <h3>Direct transfer</h3>
         <p className="muted">
           {accountId
             ? "Sign with the current owner’s testnet wallet."
@@ -364,7 +506,7 @@ function TicketPanel({ withWallet, accountId, tokenId, setTokenId }) {
             placeholder="buyer.testnet"
             required
           />
-          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="transfer-btn" disabled={!accountId}>
+          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="transfer-btn" disabled={!accountId || attended}>
             Transfer ticket
           </button>
         </form>
@@ -382,6 +524,8 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
   const [claimed, setClaimed] = useState(accountId || "");
   const [record, setRecord] = useState(null);
   const [verdict, setVerdict] = useState(null);
+  const [returning, setReturning] = useState(false);
+  const [checkTx, setCheckTx] = useState(null);
   const [log, setLog] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem("ptix-near:door:v1") || "[]");
@@ -399,16 +543,26 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
     const rec = await ticketRecord(tokenId.trim());
     setRecord(rec);
     if (!rec) {
+      setReturning(false);
       setVerdict({ ok: false, reason: "Ticket not found on chain." });
       return;
     }
-    const ok = await isOwner(tokenId.trim(), claimed.trim());
-    const result = ok
-      ? { ok: true, reason: `${claimed} is the on-chain owner.` }
-      : {
-          ok: false,
-          reason: `${claimed} is not the owner. Current owner is ${rec.token.owner_id}.`,
-        };
+    const guestMark = claimed.trim()
+      ? Boolean(await hasAttended(claimed.trim(), rec.event_id))
+      : false;
+    setReturning(guestMark);
+    const admitted = await canEnter(tokenId.trim(), claimed.trim());
+    let result;
+    if (admitted) {
+      result = { ok: true, reason: `${claimed} is the on-chain owner and has not checked in yet.` };
+    } else if (rec.attended_at && rec.token.owner_id === claimed.trim()) {
+      result = { ok: false, reason: "Deny. This ticket was already checked in and is now a souvenir badge." };
+    } else {
+      result = {
+        ok: false,
+        reason: `${claimed} is not the owner. Current owner is ${rec.token.owner_id}.`,
+      };
+    }
     setVerdict(result);
     if (ok) {
       const entry = {
@@ -458,6 +612,12 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
           Verify on-chain owner
         </button>
       </form>
+      {returning && (
+        <p className="badge-row" data-testid="door-returning">
+          <span className="badge returning">Returning guest</span>
+          <span className="muted">This account has a prior check-in for this event.</span>
+        </p>
+      )}
       {verdict && (
         <p className={`verdict ${verdict.ok ? "ok" : "err"}`} data-testid="verdict">
           {verdict.ok ? "Admit. " : "Deny. "}
@@ -467,6 +627,31 @@ function DoorPanel({ accountId, tokenId, setTokenId }) {
       {record && (
         <p className="mono">
           {record.event_name} — owner {record.token.owner_id}
+          {record.attended_at ? " — souvenir (was there)" : ""}
+        </p>
+      )}
+      {accountId && record && (accountId === record.host_id) && !record.attended_at && verdict?.ok && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const out = await checkIn({ tokenId: tokenId.trim() });
+            setCheckTx(out);
+            const rec = await ticketRecord(tokenId.trim());
+            setRecord(rec);
+            setVerdict({ ok: false, reason: "Checked in on-chain. This ticket is now a souvenir badge." });
+            if (rec?.event_id && claimed.trim()) {
+              setReturning(Boolean(await hasAttended(claimed.trim(), rec.event_id)));
+            }
+          }}
+        >
+          <button className="primary" style={{ marginTop: 12 }} type="submit" data-testid="check-in-btn">
+            Record on-chain check-in
+          </button>
+        </form>
+      )}
+      {checkTx?.hash && (
+        <p className="ok">
+          Check-in recorded. <a href={explorerTx(checkTx.hash)}>View transaction</a>
         </p>
       )}
       {log.length > 0 && (

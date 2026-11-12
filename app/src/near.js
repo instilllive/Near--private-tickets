@@ -54,8 +54,24 @@ export async function tokensForOwner(accountId) {
   });
 }
 
-export async function mintTicket({ receiverId, eventId, eventName }) {
+export function formatNear(yocto, digits = 4) {
+  if (yocto == null || yocto === "") return "—";
+  return utils.format.formatNearAmount(String(yocto), digits);
+}
+
+export function parseNear(amount) {
+  return utils.format.parseNearAmount(String(amount));
+}
+
+export async function mintTicket({ receiverId, eventId, eventName, maxResalePrice, royaltyBps }) {
   const wallet = await getWallet();
+  const args = {
+    receiver_id: receiverId,
+    event_id: eventId,
+    event_name: eventName,
+  };
+  if (maxResalePrice) args.max_resale_price = maxResalePrice;
+  if (royaltyBps != null && royaltyBps !== "") args.royalty_bps = Number(royaltyBps);
   const result = await wallet.signAndSendTransaction({
     receiverId: CONTRACT_ID,
     actions: [
@@ -63,13 +79,93 @@ export async function mintTicket({ receiverId, eventId, eventName }) {
         type: "FunctionCall",
         params: {
           methodName: "nft_mint",
-          args: {
-            receiver_id: receiverId,
-            event_id: eventId,
-            event_name: eventName,
-          },
+          args,
           gas: "30000000000000",
           deposit: utils.format.parseNearAmount("0.05"),
+        },
+      },
+    ],
+  });
+  return extract(result);
+}
+
+export async function canEnter(tokenId, accountId) {
+  return view("can_enter", { token_id: tokenId, account_id: accountId });
+}
+
+export async function hasAttended(accountId, eventId) {
+  return view("has_attended", { account_id: accountId, event_id: eventId });
+}
+
+export async function listResale({ tokenId, priceYocto }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "list_resale",
+          args: { token_id: tokenId, price: priceYocto },
+          gas: "30000000000000",
+          deposit: "0",
+        },
+      },
+    ],
+  });
+  return extract(result);
+}
+
+export async function cancelResale({ tokenId }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "cancel_resale",
+          args: { token_id: tokenId },
+          gas: "30000000000000",
+          deposit: "0",
+        },
+      },
+    ],
+  });
+  return extract(result);
+}
+
+export async function buyResale({ tokenId, priceYocto }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "buy_resale",
+          args: { token_id: tokenId },
+          gas: "80000000000000",
+          deposit: String(priceYocto),
+        },
+      },
+    ],
+  });
+  return extract(result);
+}
+
+export async function checkIn({ tokenId }) {
+  const wallet = await getWallet();
+  const result = await wallet.signAndSendTransaction({
+    receiverId: CONTRACT_ID,
+    actions: [
+      {
+        type: "FunctionCall",
+        params: {
+          methodName: "check_in",
+          args: { token_id: tokenId },
+          gas: "30000000000000",
+          deposit: "0",
         },
       },
     ],
