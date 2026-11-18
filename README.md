@@ -2,7 +2,7 @@
 
 Event tickets as NEP-171 NFTs on NEAR testnet, for private curated events. A ticket is a tradable credential: the door admits only the current on-chain owner. The host sets a resale cap and a royalty in the contract, so a listing above the cap is rejected and a fair sale splits the price (seller keeps the rest, the host gets the royalty). After the host records a check-in, the same NFT becomes an un-resellable “was there” souvenir and unlocks a `has_attended` view the host can use for returning-guest access at a later event.
 
-Events and the calendar stay in the app. The chain holds ownership, capped resale, royalties, provenance, and attendance.
+A simple events list (names and dates) stays in the app. The chain holds ownership, capped resale, royalties, provenance, and attendance.
 
 This is the NEAR HACKATHON entry for track `nfts` (Track 10, NFTs That Do Something). Deadline: 2026-11-14 23:59 UTC.
 
@@ -13,7 +13,7 @@ Paper and PDF tickets are easy to screenshot, and open resale is easy to scalp. 
 ## What is on-chain vs in the app
 
 - On-chain (NEP-171 + NEP-199): mint, current owner, transfer, host-set max resale price and royalty, in-contract list/buy with payout, provenance, check-in timestamp, souvenir metadata, `has_attended(account, event)`.
-- In the app: event calendar, listing/buy UI, souvenir badge and “Returning guest” marker, door log.
+- In the app: a simple events list with names and dates, listing/buy UI, souvenir badge and “Returning guest” marker, door log.
 
 ## NEAR features used
 
@@ -50,7 +50,7 @@ You need two NEAR testnet accounts with a small faucet balance (https://near-fau
 cargo test --manifest-path contract/Cargo.toml --lib
 ```
 
-See: nine tests pass (mint and provenance; transfer; door rejects the previous owner; over-cap listing is rejected; NEP-199 payout split is 5% / 95%; resale moves ownership and the door follows the buyer; check-in marks a souvenir; a used ticket cannot be resold; a used ticket cannot be checked in again; `has_attended` is true).
+See: nine tests pass (`mint_assigns_owner_and_provenance`; `transfer_moves_ownership_and_appends_provenance`; `door_rejects_previous_owner`; `over_cap_listing_is_rejected`; `payout_split_is_correct` — NEP-199 split is 5% / 95%; `resale_pays_and_door_follows_new_owner`; `check_in_marks_attended_and_blocks_resale_and_reuse`, including `has_attended`; `used_ticket_cannot_be_resold`; `used_ticket_cannot_be_checked_in_again`).
 
 ### B. Look up the deployed contract
 
@@ -131,12 +131,14 @@ Open the printed local URL. Lookup, provenance, cap/royalty, and door checks wor
 - `contract/` — Rust NEP-171 / NEP-199 contract
 - `app/` — small Vite + React UI
 - `scripts/e2e-testnet.mjs` — testnet mint, resale, payout, door, check-in
-- `docs/` — recorded testnet results and submission drafts
+- `docs/` — recorded testnet results and the submitted entry record
 - `keys/` — local testnet keys, not in git
 
 ## Demo video
 
-A 16:9 three-device demo (iPhone, iPad, and desktop, recorded from the real local app against NEAR testnet) is at `demo/private-tickets-near.mp4`. It shows a host minting a NEP-171 ticket to a guest, the owner on-chain, a transfer to a buyer, and the door admitting the new owner and denying the previous owner. That recording is now out of date: it does not show capped resale, royalties, or souvenir check-in, and it targeted the earlier contract account. Testnet transactions from that recording are listed in `demo/TESTNET-TXS.md`. Newer e2e transactions are in `docs/e2e-results.md`. Phone screenshots of the current resale and badge UI are at `demo/resale-phone.png` and `demo/badge-phone.png`.
+The submitted demo is a 35-second 16:9 ad at `demo/private-tickets-near-ad.mp4`. It was recorded from the real app against NEAR testnet contract [`ptixcb96a65fb.testnet`](https://testnet.nearblocks.io/address/ptixcb96a65fb.testnet). It shows a host minting a ticket with a 1 N cap and a 5% royalty, the contract rejecting a listing above the cap, a fair sale (0.95 N to the seller, 0.05 N to the host), the door admitting the current owner and denying the previous owner, check-in turning the ticket into a “was there” souvenir with a returning-guest marker, and the same flow on phone, iPad, and desktop. Live app: https://near-private-tickets.netlify.app. The posted ad is at https://x.com/Dxter113/status/2120915508580987063.
+
+An earlier, longer three-device recording at `demo/private-tickets-near.mp4` predates capped resale, royalties, and souvenir check-in, and targeted the earlier contract account. Testnet transactions from that recording are listed in `demo/TESTNET-TXS.md`. Newer e2e transactions are in `docs/e2e-results.md`. Phone screenshots of the current resale and badge UI are at `demo/resale-phone.png` and `demo/badge-phone.png`.
 
 ## License
 
